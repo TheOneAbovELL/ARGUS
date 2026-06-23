@@ -1,0 +1,2 @@
+"""ARGUS backend application package."""
+

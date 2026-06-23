@@ -1,0 +1,240 @@
+## ARGUS Quant Research Terminal
+
+### Overview
+Athena Quant Research Terminal is an AI-powered quantitative research platform designed to automate equity analysis by combining market data, risk metrics, and multi-agent AI reasoning into a unified research workflow.
+
+The platform is inspired by professional financial research tools and enables retail investors, students, and analysts to generate institutional-style research through an interactive terminal interface.
+
+Instead of one-shot LLM output, the platform decomposes analysis into specialized agents that independently gather data, evaluate risk, and synthesize insights into a consolidated report.
+
+---
+
+## Mission
+- Transform a stock query like "Analyze NVIDIA and provide an investment outlook." into a structured, data-backed research workflow.
+- Deliver market data collection, news aggregation, quantitative analysis, risk assessment, and AI-driven report generation.
+- Favor analytical rigor over purely generative responses.
+
+---
+
+## Architecture
+
+### Core Flow
+1. User query
+2. Frontend dashboard
+3. FastAPI backend
+4. Coordinator agent
+5. Specialized analysis agents
+6. Consolidated research report
+
+### Agent Topology
+- News Agent
+- Market Agent
+- Risk Agent
+- Strategy Agent
+- Research Agent
+
+Each agent is responsible for a distinct domain and operates independently to support the final synthesis.
+
+---
+
+## Agent Responsibilities
+
+### News Agent
+- Gather recent market news for a target security
+- Extract headlines, catalysts, and analyst actions
+- Summarize news and analyze sentiment
+- Identify earnings highlights and key events
+
+Outputs:
+- Bullish/Bearish sentiment
+- Key market events
+- Analyst upgrades/downgrades
+- Earnings catalysts
+
+### Market Agent
+- Retrieve financial market and historical price data
+- Generate quantitative indicators
+- Compute:
+  - Daily returns
+  - Moving averages
+  - Relative Strength Index (RSI)
+  - MACD
+  - Bollinger Bands
+
+The Market Agent provides the quantitative foundation for research.
+
+### Risk Agent
+- Evaluate risk profile with quantitative metrics
+- Compute:
+  - Historical volatility
+  - Maximum drawdown
+  - Sharpe ratio
+  - Sortino ratio
+  - Beta
+  - Value at Risk (VaR)
+
+The Risk Agent ensures recommendations are grounded in risk-adjusted analysis.
+
+### Strategy Agent
+- Interpret market and risk results
+- Formulate actionable trading and investment hypotheses
+- Provide:
+  - Suggested entry ranges
+  - Risk/reward assessment
+  - Stop-loss guidance
+
+Example output:
+- Bullish momentum detected
+- Suggested entry: $180–$185
+- Risk/reward: 1:3
+- Suggested stop loss: $170
+
+### Research Agent
+- Aggregate outputs from all agents
+- Apply contextual reasoning and synthesis
+- Generate a structured research report
+
+Report structure:
+- Executive Summary
+- Market Analysis
+- News Analysis
+- Risk Assessment
+- Investment Thesis
+- Conclusion
+
+---
+
+## Coordinator Agent
+- Decomposes user requests into agent tasks
+- Schedules agents asynchronously
+- Orchestrates concurrent execution
+- Aggregates results
+- Handles execution errors
+
+Example orchestration:
+```python
+results = await asyncio.gather(
+    news_agent.run(),
+    market_agent.run(),
+    risk_agent.run(),
+    strategy_agent.run()
+)
+```
+This approach minimizes latency and keeps the research workflow responsive.
+
+---
+
+## User Experience
+- Real-time progress updates via WebSockets
+- Visible status indicators such as:
+  - ✓ Fetching market data
+  - ✓ Gathering news
+  - ✓ Calculating risk metrics
+  - ✓ Generating research report
+
+This keeps users informed while analysis runs.
+
+---
+
+## Quantitative Analytics Engine
+A dedicated analytics layer computes financial statistics independently of the AI.
+
+Key metrics:
+- Return
+- Volatility
+- Sharpe ratio
+- Sortino ratio
+- Maximum drawdown
+- Beta
+- Value at Risk
+
+This helps ensure the platform delivers rigorous, data-driven insights.
+
+---
+
+## Technology Stack
+
+### Frontend
+- React
+- TypeScript
+- Vite
+
+Features:
+- Bloomberg-style dashboard
+- Research workspace
+- Agent output panels
+- Generated reports
+- Historical analysis
+- Interactive charts
+- Candlestick and volume visualizations
+- Technical indicator overlays
+- Real-time agent progress monitor
+
+### Backend
+- FastAPI
+- Async-first architecture
+- API routing
+- Agent orchestration
+- Data aggregation
+- WebSocket communication
+
+FastAPI was chosen for its performance, native async support, automatic API docs, and scalability.
+
+### AI Layer
+- Model-agnostic architecture
+- Supports Groq, DeepSeek, Llama, Gemini, GPT, and future models
+
+AI responsibilities:
+- Report generation
+- Investment thesis formation
+- Summarization
+- Agent reasoning
+
+---
+
+## Data Layer
+
+Sources:
+- Yahoo Finance
+- Public financial APIs
+
+Stored data:
+- Historical prices
+- Generated research reports
+- User queries
+- Analytics results
+
+Future persistence options include PostgreSQL for long-term storage.
+
+---
+
+## Engineering Concepts Demonstrated
+- Full-stack development
+- React + TypeScript
+- FastAPI backend
+- REST APIs
+- WebSockets
+- Async programming
+- Concurrent systems
+- asyncio orchestration
+- AI engineering
+- Multi-agent systems
+- Prompt engineering
+- LLM integration
+- Quantitative finance
+- Risk analytics
+- Technical indicators
+- Performance metrics
+- Modular architecture
+- Service separation
+
+---
+
+## Future Roadmap
+- Backtesting engine for historical strategy evaluation
+- Portfolio analytics for multi-asset research
+- Retrieval-augmented generation (RAG) over earnings reports and filings
+- Real-time market streaming and alerts
+- Portfolio optimization using modern portfolio theory
+- Multi-agent debate framework: bull, bear, and risk agents with judge synthesis
+- Distributed architecture with Redis, Celery, and microservices
