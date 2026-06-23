@@ -1,5 +1,7 @@
 """Unit tests for the Yahoo Finance provider adapter."""
 
+import asyncio
+
 import pytest
 
 from app.providers.market_data_provider import (
@@ -27,7 +29,7 @@ def test_yfinance_provider_adapts_external_response() -> None:
         )
     )
 
-    snapshot = provider.get_company_snapshot("NVDA")
+    snapshot = asyncio.run(provider.get_company_snapshot("NVDA"))
 
     assert snapshot is not None
     assert snapshot.ticker == "NVDA"
@@ -44,7 +46,7 @@ def test_yfinance_provider_uses_safe_field_fallbacks() -> None:
         )
     )
 
-    snapshot = provider.get_company_snapshot("TEST")
+    snapshot = asyncio.run(provider.get_company_snapshot("TEST"))
 
     assert snapshot is not None
     assert snapshot.company_name == "Example Inc."
@@ -58,7 +60,7 @@ def test_yfinance_provider_returns_none_when_quote_has_no_price() -> None:
         ticker_factory=lambda ticker: FakeTicker({"longName": "No Quote"})
     )
 
-    assert provider.get_company_snapshot("MISSING") is None
+    assert asyncio.run(provider.get_company_snapshot("MISSING")) is None
 
 
 def test_yfinance_provider_retries_then_wraps_network_failure() -> None:
@@ -78,7 +80,7 @@ def test_yfinance_provider_retries_then_wraps_network_failure() -> None:
     )
 
     with pytest.raises(MarketDataProviderUnavailableError):
-        provider.get_company_snapshot("NVDA")
+        asyncio.run(provider.get_company_snapshot("NVDA"))
 
     assert attempts == ["NVDA", "NVDA", "NVDA"]
     assert delays == [0.1, 0.1]

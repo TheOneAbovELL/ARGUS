@@ -1,5 +1,6 @@
 """Opt-in live integration tests for Yahoo Finance."""
 
+import asyncio
 import os
 
 import pytest
@@ -18,7 +19,9 @@ pytestmark = [
 
 def test_yfinance_provider_returns_live_nvidia_snapshot() -> None:
     """The adapter should remain compatible with the live yfinance response."""
-    snapshot = YFinanceProvider(max_attempts=2).get_company_snapshot("NVDA")
+    snapshot = asyncio.run(
+        YFinanceProvider(max_attempts=2).get_company_snapshot("NVDA")
+    )
 
     assert snapshot is not None
     assert snapshot.ticker == "NVDA"

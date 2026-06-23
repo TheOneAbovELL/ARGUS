@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     market_data_provider: Literal["yfinance", "mock"] = "yfinance"
     yfinance_max_attempts: int = 2
     yfinance_retry_delay_seconds: float = 0.25
+    quant_benchmark_ticker: str = "SPY"
+    quant_history_period: str = "1y"
+    quant_annual_risk_free_rate: float = 0.0
 
     model_config = SettingsConfigDict(env_prefix="ARGUS_")
 

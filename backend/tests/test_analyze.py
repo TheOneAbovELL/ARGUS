@@ -9,7 +9,10 @@ from app.providers.market_data_provider import (
     MarketDataProviderUnavailableError,
     MarketDataSnapshot,
     MockMarketDataProvider,
+    PriceHistory,
+    PricePoint,
 )
+from datetime import date
 from app.services.market_data import MarketDataService
 
 
@@ -29,7 +32,7 @@ def use_mock_market_data_service() -> None:
 class OverrideMarketDataProvider:
     """Provider test double used to verify FastAPI dependency overrides."""
 
-    def get_company_snapshot(self, ticker: str) -> MarketDataSnapshot:
+    async def get_company_snapshot(self, ticker: str) -> MarketDataSnapshot:
         """Return a distinct snapshot for any valid ticker."""
         return MarketDataSnapshot(
             ticker=ticker,
@@ -38,12 +41,34 @@ class OverrideMarketDataProvider:
             current_price=99.99,
         )
 
+    async def get_price_history(
+        self, ticker: str, period: str = "1y"
+    ) -> PriceHistory:
+        prices = (100.0, 102.0, 101.0, 104.0) if ticker == "SPY" else (
+            100.0,
+            103.0,
+            99.0,
+            108.0,
+        )
+        return PriceHistory(
+            ticker,
+            tuple(
+                PricePoint(date(2025, 1, index + 1), price)
+                for index, price in enumerate(prices)
+            ),
+        )
+
 
 class UnavailableMarketDataProvider:
     """Provider test double that simulates an upstream outage."""
 
-    def get_company_snapshot(self, ticker: str) -> None:
+    async def get_company_snapshot(self, ticker: str) -> None:
         """Raise the provider boundary exception."""
+        raise MarketDataProviderUnavailableError("upstream failed")
+
+    async def get_price_history(
+        self, ticker: str, period: str = "1y"
+    ) -> None:
         raise MarketDataProviderUnavailableError("upstream failed")
 
 
@@ -52,11 +77,19 @@ def test_analyze_endpoint_returns_market_snapshot() -> None:
     response = client.post("/analyze", json={"ticker": "NVDA"})
 
     assert response.status_code == 200
-    assert response.json() == {
+    payload = response.json()
+    assert {key: payload[key] for key in ("ticker", "company_name", "sector", "current_price")} == {
         "ticker": "NVDA",
         "company_name": "NVIDIA Corporation",
         "sector": "Technology",
         "current_price": 182.43,
+    }
+    assert set(payload["metrics"]) == {
+        "annual_return",
+        "volatility",
+        "sharpe_ratio",
+        "beta",
+        "max_drawdown",
     }
 
 
@@ -99,12 +132,14 @@ def test_analyze_endpoint_uses_injected_market_data_service() -> None:
     response = client.post("/analyze", json={"ticker": "MSFT"})
 
     assert response.status_code == 200
-    assert response.json() == {
+    payload = response.json()
+    assert {key: payload[key] for key in ("ticker", "company_name", "sector", "current_price")} == {
         "ticker": "MSFT",
         "company_name": "Injected Company",
         "sector": "Testing",
         "current_price": 99.99,
     }
+    assert payload["metrics"]["max_drawdown"] < 0
 
 
 def test_analyze_endpoint_returns_service_unavailable_for_provider_failure() -> None:

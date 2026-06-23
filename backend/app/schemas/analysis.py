@@ -26,6 +26,16 @@ class AnalyzeRequest(BaseModel):
         return normalized
 
 
+class QuantMetricsResponse(BaseModel):
+    """Deterministic risk and return analytics."""
+
+    annual_return: float
+    volatility: float
+    sharpe_ratio: float
+    beta: float
+    max_drawdown: float
+
+
 class AnalyzeResponse(BaseModel):
     """Structured response returned by the ticker analysis endpoint."""
 
@@ -33,4 +43,4 @@ class AnalyzeResponse(BaseModel):
     company_name: str
     sector: str
     current_price: float
-
+    metrics: QuantMetricsResponse

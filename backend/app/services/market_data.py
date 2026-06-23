@@ -1,10 +1,23 @@
 """Market data service for Phase 2."""
 
+import asyncio
+from collections.abc import Iterable
+from dataclasses import dataclass
+
 from app.providers.market_data_provider import (
     MarketDataProvider,
     MarketDataProviderUnavailableError,
     MarketDataSnapshot,
 )
+from app.quant.metrics import QuantDataError, QuantEngine, QuantMetrics
+
+
+@dataclass(frozen=True)
+class CompanyAnalysis:
+    """Company snapshot combined with deterministic quantitative metrics."""
+
+    snapshot: MarketDataSnapshot
+    metrics: QuantMetrics
 
 
 class MarketDataNotFoundError(Exception):
@@ -22,14 +35,19 @@ class MarketDataService:
     change without changing API routes.
     """
 
-    def __init__(self, provider: MarketDataProvider) -> None:
+    def __init__(
+        self,
+        provider: MarketDataProvider,
+        quant_engine: QuantEngine | None = None,
+    ) -> None:
         """Create the service with a market data provider."""
         self._provider = provider
+        self._quant_engine = quant_engine or QuantEngine(provider)
 
-    def get_company_snapshot(self, ticker: str) -> MarketDataSnapshot:
+    async def get_company_snapshot(self, ticker: str) -> MarketDataSnapshot:
         """Return a normalized market data snapshot for one ticker."""
         try:
-            snapshot = self._provider.get_company_snapshot(ticker)
+            snapshot = await self._provider.get_company_snapshot(ticker)
         except MarketDataProviderUnavailableError as exc:
             raise MarketDataUnavailableError(
                 "Market data is temporarily unavailable. Please try again later."
@@ -41,3 +59,32 @@ class MarketDataService:
             )
 
         return snapshot
+
+    async def analyze_company(self, ticker: str) -> CompanyAnalysis:
+        """Combine company data with quantitative analytics concurrently."""
+        try:
+            snapshot, metrics = await asyncio.gather(
+                self.get_company_snapshot(ticker),
+                self._quant_engine.analyze(ticker),
+            )
+        except QuantDataError as exc:
+            raise MarketDataNotFoundError(
+                f"Analytics are not available for ticker '{ticker}': {exc}"
+            ) from exc
+        except MarketDataProviderUnavailableError as exc:
+            raise MarketDataUnavailableError(
+                "Market data is temporarily unavailable. Please try again later."
+            ) from exc
+        return CompanyAnalysis(snapshot=snapshot, metrics=metrics)
+
+    async def get_company_snapshots(
+        self, tickers: Iterable[str]
+    ) -> list[MarketDataSnapshot]:
+        """Retrieve independent ticker snapshots concurrently.
+
+        asyncio.gather schedules all provider coroutines together while
+        preserving the input order in the returned list.
+        """
+        return await asyncio.gather(
+            *(self.get_company_snapshot(ticker) for ticker in tickers)
+        )
