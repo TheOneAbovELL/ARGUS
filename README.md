@@ -108,42 +108,42 @@ ARGUS prioritizes research quality over conversational fluency.
                                                  │
                                                  ▼
 
-┌────────────────────────────────────────────────────────────────────────────┐
-│                               FastAPI Backend                             │
-└────────────────────────────────────────────────────────────────────────────┘
-                         │                           │
-                         ▼                           ▼
+        ┌────────────────────────────────────────────────────────────────────────────┐
+        │                               FastAPI Backend                              │
+        └────────────────────────────────────────────────────────────────────────────┘
+                                   │                           │
+                                   ▼                           ▼
 
-              ┌─────────────────┐       ┌────────────────────┐
-              │  Quant Engine   │       │ Portfolio Engine   │
-              └─────────────────┘       └────────────────────┘
-                         │                           │
-                         └──────────────┬────────────┘
-                                        ▼
+                          ┌─────────────────┐       ┌────────────────────┐
+                          │  Quant Engine   │       │ Portfolio Engine   │
+                          └─────────────────┘       └────────────────────┘
+                                   │                           │
+                                   └──────────────┬────────────┘
+                                                  ▼
 
-                           ┌──────────────────────┐
-                           │ Intelligence Layer   │
-                           └──────────────────────┘
+                                     ┌──────────────────────┐
+                                     │ Intelligence Layer   │
+                                     └──────────────────────┘
 
-             ┌──────────────┬──────────────┬──────────────┬──────────────┐
-             ▼              ▼              ▼              ▼
+                         ┌──────────────┬──────────────┬──────────────┐
+                         ▼              ▼              ▼              ▼
 
-       Market Agent    Risk Agent     News Agent    Strategy Agent
+                    Market Agent    Risk Agent     News Agent    Strategy Agent
 
-             │              │              │              │
-             └──────────────┴───────┬──────┴──────────────┘
-                                    ▼
+                         │              │              │              │
+                         └──────────────┴───────┬──────┴──────────────┘
+                                                ▼
 
-                        ┌────────────────────────┐
-                        │   Knowledge Layer      │
-                        │ ChromaDB + Embeddings  │
-                        └────────────────────────┘
+                                   ┌────────────────────────┐
+                                   │   Knowledge Layer      │
+                                   │ ChromaDB + Embeddings  │
+                                   └────────────────────────┘
 
-                                    │
-                                    ▼
+                                                │
+                                                ▼
 
-                 SEC Filings • Earnings Calls • Annual Reports
-                  Investor Presentations • Research Documents
+                           SEC Filings • Earnings Calls • Annual Reports
+                           Investor Presentations • Research Documents
 ```
 
 ---
