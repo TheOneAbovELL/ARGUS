@@ -5,3 +5,5 @@ __pycache__/
 backend/.argus/
 .venv/
 venv/
+
+docs/
