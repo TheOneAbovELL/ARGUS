@@ -36,6 +36,16 @@ class PriceHistory:
     points: tuple[PricePoint, ...]
 
 
+@dataclass(frozen=True)
+class NewsItem:
+    """Normalized provider-grounded company news item."""
+
+    headline: str
+    publisher: str
+    url: str | None = None
+    published_at: str | None = None
+
+
 class MarketDataProvider(Protocol):
     """Interface that all market data providers must implement."""
 
@@ -46,6 +56,11 @@ class MarketDataProvider(Protocol):
         self, ticker: str, period: str = "1y"
     ) -> PriceHistory | None:
         """Return adjusted daily prices, or None when unavailable."""
+
+    async def get_company_news(
+        self, ticker: str, limit: int = 5
+    ) -> tuple[NewsItem, ...]:
+        """Return normalized recent company news."""
 
 
 class MarketDataProviderUnavailableError(Exception):
@@ -137,6 +152,57 @@ class YFinanceProvider:
             "Yahoo Finance history is temporarily unavailable."
         ) from last_error
 
+    async def get_company_news(
+        self, ticker: str, limit: int = 5
+    ) -> tuple[NewsItem, ...]:
+        """Fetch company news without blocking the event loop."""
+        return await asyncio.to_thread(self._get_company_news_sync, ticker, limit)
+
+    def _get_company_news_sync(
+        self, ticker: str, limit: int
+    ) -> tuple[NewsItem, ...]:
+        """Run blocking yfinance news retrieval and normalize response variants."""
+        last_error: Exception | None = None
+        for attempt in range(self._max_attempts):
+            try:
+                raw_items = self._ticker_factory(ticker).news or []
+                items: list[NewsItem] = []
+                for raw in raw_items[:limit]:
+                    content = raw.get("content") or raw
+                    provider = content.get("provider") or {}
+                    canonical_url = content.get("canonicalUrl") or {}
+                    headline = content.get("title")
+                    if not headline:
+                        continue
+                    items.append(
+                        NewsItem(
+                            headline=headline,
+                            publisher=(
+                                provider.get("displayName")
+                                or content.get("publisher")
+                                or "Unknown publisher"
+                            ),
+                            url=(
+                                canonical_url.get("url")
+                                or content.get("link")
+                            ),
+                            published_at=(
+                                content.get("pubDate")
+                                or str(content.get("providerPublishTime") or "")
+                                or None
+                            ),
+                        )
+                    )
+                return tuple(items)
+            except Exception as exc:
+                last_error = exc
+                if attempt + 1 < self._max_attempts:
+                    self._sleeper(self._retry_delay_seconds)
+
+        raise MarketDataProviderUnavailableError(
+            "Yahoo Finance news is temporarily unavailable."
+        ) from last_error
+
     @staticmethod
     def _to_snapshot(
         ticker: str, info: Mapping[str, Any] | None
@@ -199,3 +265,20 @@ class MockMarketDataProvider:
                 for index, price in enumerate(prices)
             ),
         )
+
+    async def get_company_news(
+        self, ticker: str, limit: int = 5
+    ) -> tuple[NewsItem, ...]:
+        """Return deterministic headlines for local development and tests."""
+        if ticker not in self._mock_data:
+            return ()
+        return (
+            NewsItem(
+                headline="NVIDIA reports continued data-center demand",
+                publisher="ARGUS Test Wire",
+            ),
+            NewsItem(
+                headline="Semiconductor investors monitor valuation risks",
+                publisher="ARGUS Test Wire",
+            ),
+        )[:limit]

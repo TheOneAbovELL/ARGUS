@@ -84,3 +84,27 @@ def test_yfinance_provider_retries_then_wraps_network_failure() -> None:
 
     assert attempts == ["NVDA", "NVDA", "NVDA"]
     assert delays == [0.1, 0.1]
+
+
+def test_yfinance_provider_normalizes_current_news_shape() -> None:
+    """Nested yfinance news records should become stable news items."""
+
+    class NewsTicker:
+        news = [
+            {
+                "content": {
+                    "title": "NVIDIA announces a new platform",
+                    "provider": {"displayName": "Example Wire"},
+                    "canonicalUrl": {"url": "https://example.com/story"},
+                    "pubDate": "2026-01-01T00:00:00Z",
+                }
+            }
+        ]
+
+    provider = YFinanceProvider(ticker_factory=lambda ticker: NewsTicker())
+    items = asyncio.run(provider.get_company_news("NVDA"))
+
+    assert len(items) == 1
+    assert items[0].headline == "NVIDIA announces a new platform"
+    assert items[0].publisher == "Example Wire"
+    assert items[0].url == "https://example.com/story"
