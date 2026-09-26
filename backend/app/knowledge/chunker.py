@@ -1,4 +1,4 @@
-"""Provenance-preserving document chunking."""
+g"""Provenance-preserving document chunking."""
 
 from dataclasses import dataclass
 import hashlib

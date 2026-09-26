@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     quant_benchmark_ticker: str = "SPY"
     quant_history_period: str = "1y"
     quant_annual_risk_free_rate: float = 0.0
-    knowledge_chroma_path: str = ".argus/chroma"
+    
+    # Use /tmp on Vercel as it's the only writable directory
+    knowledge_chroma_path: str = "/tmp/.argus/chroma" if __import__("os").environ.get("VERCEL") else ".argus/chroma"
+    
     knowledge_collection_name: str = "argus_knowledge"
     knowledge_chunk_size: int = 250
     knowledge_chunk_overlap: int = 40
