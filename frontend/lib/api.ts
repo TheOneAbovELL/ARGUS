@@ -1,4 +1,39 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Dynamic API Base URL resolution for unified or split environments
+export function getApiBase(): string {
+  // 1. Explicit environment variable
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+  }
+
+  // 2. Client-side browser checks
+  if (typeof window !== 'undefined') {
+    // Check if user configured a custom backend URL in UI
+    const customUrl = localStorage.getItem('argus_backend_url');
+    if (customUrl) {
+      return customUrl.trim().replace(/\/$/, '');
+    }
+
+    // If running in development on port 3000 while backend is on 8000
+    if (window.location.port === '3000') {
+      return 'http://localhost:8000';
+    }
+
+    // When served directly from FastAPI or via a reverse proxy (same origin)
+    return '';
+  }
+
+  return 'http://localhost:8000';
+}
+
+export function setCustomApiBase(url: string): void {
+  if (typeof window !== 'undefined') {
+    if (url && url.trim()) {
+      localStorage.setItem('argus_backend_url', url.trim());
+    } else {
+      localStorage.removeItem('argus_backend_url');
+    }
+  }
+}
 
 // ─── Health ──────────────────────────────────────────────────
 
@@ -6,8 +41,9 @@ export interface HealthResponse {
   status: string;
 }
 
-export async function checkHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${API_BASE}/health`, { cache: 'no-store' });
+export async function checkHealth(customBase?: string): Promise<HealthResponse> {
+  const base = customBase !== undefined ? customBase.replace(/\/$/, '') : getApiBase();
+  const res = await fetch(`${base}/health`, { cache: 'no-store' });
   if (!res.ok) throw new Error('Backend unavailable');
   return res.json();
 }
@@ -31,7 +67,8 @@ export interface AnalyzeResponse {
 }
 
 export async function analyzeTicker(ticker: string): Promise<AnalyzeResponse> {
-  const res = await fetch(`${API_BASE}/analyze`, {
+  const base = getApiBase();
+  const res = await fetch(`${base}/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ticker }),
@@ -62,7 +99,8 @@ export interface PortfolioAnalysisResponse {
 export async function analyzePortfolio(
   holdings: PortfolioHolding[],
 ): Promise<PortfolioAnalysisResponse> {
-  const res = await fetch(`${API_BASE}/portfolio/analyze`, {
+  const base = getApiBase();
+  const res = await fetch(`${base}/portfolio/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ holdings }),
@@ -99,7 +137,8 @@ export interface ResearchResponse {
 }
 
 export async function researchTicker(ticker: string): Promise<ResearchResponse> {
-  const res = await fetch(`${API_BASE}/research`, {
+  const base = getApiBase();
+  const res = await fetch(`${base}/research`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ticker }),

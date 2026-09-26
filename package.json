@@ -1,0 +1,13 @@
+{
+  "name": "argus-terminal",
+  "version": "0.1.0",
+  "description": "ARGUS — AI-Powered Quantitative Research Terminal",
+  "scripts": {
+    "build": "npm run build:frontend && npm run sync:static",
+    "build:frontend": "cd frontend && npm run build",
+    "sync:static": "node -e \"const fs = require('fs'); const path = require('path'); const src = path.join('frontend', 'out'); const dest = path.join('backend', 'app', 'static'); fs.cpSync(src, dest, { recursive: true, force: true }); console.log('✓ Synced frontend build into backend/app/static');\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8000",
+    "start": "python run.py"
+  }
+}
