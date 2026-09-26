@@ -1,6 +1,7 @@
 """FastAPI application entry point for ARGUS."""
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 
 from app.api.analyze import router as analyze_router
 from app.api.health import router as health_router
@@ -16,6 +17,12 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(portfolio_router)
     app.include_router(research_router)
+    
+    @app.get("/", include_in_schema=False)
+    def root():
+        """Redirect the root URL to the API documentation."""
+        return RedirectResponse(url="/docs")
+        
     return app
 
 
