@@ -1,24 +1,31 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import Navbar from "@/components/Navbar";
+import type { Metadata, Viewport } from 'next';
+import './globals.css';
+import AppShell from '@/components/AppShell';
+import { AuthProvider } from '@/lib/auth';
+import { MetricDefinitionsProvider } from '@/lib/metrics';
+import { SystemProvider } from '@/lib/system';
 
 export const metadata: Metadata = {
-  title: "ARGUS | Quant Research",
-  description: "Quantitative finance research platform",
+  title: 'ARGUS — Quantitative Research Terminal',
+  description: 'Evidence-grounded quantitative research: market data, risk analytics, portfolios and cited research reports.',
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export const viewport: Viewport = {
+  themeColor: '#090b0e',
+  colorScheme: 'dark',
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen flex flex-col font-sans">
-        <Navbar />
-        <main className="flex-1 max-w-7xl w-full mx-auto p-6">
-          {children}
-        </main>
+      <body className="min-h-screen font-sans">
+        <SystemProvider>
+          <AuthProvider>
+            <MetricDefinitionsProvider>
+              <AppShell>{children}</AppShell>
+            </MetricDefinitionsProvider>
+          </AuthProvider>
+        </SystemProvider>
       </body>
     </html>
   );

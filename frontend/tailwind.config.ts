@@ -1,29 +1,42 @@
-import type { Config } from "tailwindcss";
+import type { Config } from 'tailwindcss';
+
+// Design tokens are CSS variables (app/globals.css) so components never hardcode colors.
+const token = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
 
 const config: Config = {
-  content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
+  content: ['./components/**/*.{ts,tsx}', './app/**/*.{ts,tsx}', './lib/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        argus: {
-          bg: "#0a0a0a",
-          surface: "#171717",
-          border: "#262626",
-          text: "#e5e5e5",
-          muted: "#a3a3a3",
-          accent: "#00ff88",
-          secondary: "#00e5ff",
-          error: "#ff4444"
-        }
+        bg: token('bg'),
+        panel: token('panel'),
+        raised: token('raised'),
+        line: token('line'),
+        ink: { DEFAULT: token('ink'), muted: token('ink-muted'), faint: token('ink-faint') },
+        accent: token('accent'),
+        up: token('up'),
+        down: token('down'),
+        warn: token('warn'),
+        synthetic: token('synthetic'),
+        info: token('info'),
+        'chart-1': token('chart-1'),
+        'chart-2': token('chart-2'),
+        'chart-3': token('chart-3'),
+        'chart-4': token('chart-4'),
       },
       fontFamily: {
-        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
-        sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
-      }
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Ubuntu', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"Cascadia Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+      },
+      fontSize: { '2xs': ['0.6875rem', { lineHeight: '1rem' }] },
+      keyframes: {
+        'fade-in': { from: { opacity: '0', transform: 'translateY(2px)' }, to: { opacity: '1', transform: 'none' } },
+        shimmer: { '0%': { backgroundPosition: '-400px 0' }, '100%': { backgroundPosition: '400px 0' } },
+      },
+      animation: {
+        'fade-in': 'fade-in 160ms ease-out',
+        shimmer: 'shimmer 1.4s linear infinite',
+      },
     },
   },
   plugins: [],

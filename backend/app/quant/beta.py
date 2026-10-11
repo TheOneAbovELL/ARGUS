@@ -4,6 +4,8 @@ import math
 import statistics
 from collections.abc import Sequence
 
+from app.quant.returns import is_effectively_zero
+
 
 def beta(asset_returns: Sequence[float], benchmark_returns: Sequence[float]) -> float:
     """Calculate asset covariance with the benchmark divided by benchmark variance."""
@@ -17,6 +19,6 @@ def beta(asset_returns: Sequence[float], benchmark_returns: Sequence[float]) -> 
         raise ValueError("Returns must be finite numbers.")
 
     benchmark_variance = statistics.variance(benchmark_returns)
-    if benchmark_variance == 0:
+    if is_effectively_zero(math.sqrt(benchmark_variance)):
         raise ValueError("Beta is undefined when benchmark variance is zero.")
     return statistics.covariance(asset_returns, benchmark_returns) / benchmark_variance

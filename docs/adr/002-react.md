@@ -18,7 +18,10 @@ data shapes aligned with backend API contracts.
 
 ## Status
 
-Accepted
+Accepted, then amended: React + TypeScript stand, but the implementation uses
+**Next.js 14 with static export** (`output: 'export'`) rather than Vite, and the
+exported files are served by the FastAPI process from `backend/app/static`.
+Dynamic pages therefore use query parameters instead of dynamic route segments.
 
 ## Context
 
@@ -35,7 +38,8 @@ The frontend should be resume-worthy and familiar to modern software teams.
 
 ## Decision
 
-Use React with TypeScript, built with Vite.
+Use React with TypeScript. *Amended:* the implementation uses Next.js 14 with
+static export (`output: 'export'`) instead of Vite; see Status above.
 
 ## Reason
 
@@ -50,8 +54,10 @@ React is appropriate because it provides:
 TypeScript is appropriate because it adds static types to JavaScript. This helps
 catch mistakes before runtime and makes API contracts clearer.
 
-Vite is appropriate because it gives a fast development server and a simple
-modern frontend build setup.
+The original plan chose Vite for its fast development server and simple build.
+Next.js static export was adopted instead: it gives file-based routing and a
+production build that FastAPI serves from the same origin, with no Node server
+at runtime.
 
 ## Alternatives
 
@@ -67,8 +73,9 @@ Svelte is elegant and fast, but its ecosystem is smaller than React's.
 ### Next.js
 
 Next.js is powerful for full-stack React applications and server-side rendering.
-ARGUS initially does not need server-rendered marketing pages. A Vite React app
-keeps the architecture simpler and makes the frontend/backend boundary clearer.
+ARGUS does not need server-side rendering. It uses Next.js only as a static
+site generator (`output: 'export'`), which keeps the frontend/backend boundary
+clear: the browser talks to the FastAPI JSON API and nothing else.
 
 ### Plain HTML, CSS, And JavaScript
 

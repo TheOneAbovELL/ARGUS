@@ -46,7 +46,14 @@ backend/app/
 ├── core/
 ├── schemas/
 ├── services/
-├── models/
+├── db/            # SQLAlchemy models, sessions, migrations helpers
+├── repositories/  # owner-scoped persistence
+├── providers/     # market data (Yahoo, fixture, cache), SEC EDGAR
+├── quant/         # deterministic metrics
+├── portfolio/     # portfolio engine
+├── agents/        # research agents, evidence ledger, validation
+├── knowledge/     # document loading, chunking, embeddings, retrieval
+├── llm/           # optional model providers
 └── main.py
 ```
 

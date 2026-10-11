@@ -1,8 +1,29 @@
+[project]
+name = "argus-backend"
+version = "0.2.0"
+requires-python = ">=3.12"  # numpy 2.5 requires Python 3.12+
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-asyncio_default_fixture_loop_scope = "function"
 markers = [
-    "integration: tests that make live requests to external systems",
+    "integration: tests that make live requests to free external data sources (opt-in)",
 ]
+filterwarnings = [
+    # Starlette's TestClient references a deprecated anyio alias (third-party).
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["migrations/versions", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC"]
+# B905: pairwise zip(x, x[1:]) is intentional (different lengths) throughout the quant code.
+ignore = ["B008", "E501", "B905"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017"]

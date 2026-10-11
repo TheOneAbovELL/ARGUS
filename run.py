@@ -28,4 +28,13 @@ if __name__ == "__main__":
     print(" • Health Check:    http://localhost:8000/health")
     print("=" * 65)
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True, app_dir=str(backend_dir))
+    # Development launcher: bind to localhost only (not the LAN) and watch only
+    # the backend sources for reloads. Use the Docker image for deployment.
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+        reload_dirs=[str(backend_dir / "app")],
+        app_dir=str(backend_dir),
+    )

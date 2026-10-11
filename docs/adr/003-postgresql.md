@@ -19,7 +19,10 @@ migrations in a later phase.
 
 ## Status
 
-Accepted
+Accepted and implemented: SQLAlchemy 2.0 (async) + Alembic. PostgreSQL is the
+production target (`docker-compose.yml`, CI migration tests). SQLite is the
+zero-setup default for local development; the schema and migrations are
+portable across both (JSON → JSONB on PostgreSQL, timezone-aware timestamps).
 
 ## Context
 

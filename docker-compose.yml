@@ -1,0 +1,43 @@
+# Local full stack: ARGUS + PostgreSQL. Everything here is free to run.
+#   docker compose up --build
+# Then open http://localhost:8000
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: argus
+      POSTGRES_PASSWORD: ${ARGUS_DB_PASSWORD:-argus-local-only}
+      POSTGRES_DB: argus
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U argus -d argus"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      ARGUS_DATABASE_URL: postgresql+psycopg://argus:${ARGUS_DB_PASSWORD:-argus-local-only}@db:5432/argus
+      # fixture = offline synthetic data; yfinance = free live data (delayed)
+      ARGUS_MARKET_DATA_PROVIDER: ${ARGUS_MARKET_DATA_PROVIDER:-yfinance}
+      ARGUS_CORS_ORIGINS: '["http://localhost:8000"]'
+      # Optional: enables SEC EDGAR filings; must contain a contact email.
+      ARGUS_SEC_USER_AGENT: ${ARGUS_SEC_USER_AGENT:-}
+      # Set true only behind HTTPS.
+      ARGUS_SESSION_COOKIE_SECURE: ${ARGUS_SESSION_COOKIE_SECURE:-false}
+    volumes:
+      - argusdata:/data                          # database (if SQLite), ChromaDB index, uploaded files
+      - argusmodels:/home/argus/.cache/chroma    # downloaded ONNX embedding model (~80 MB)
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  argusdata:
+  argusmodels:

@@ -102,3 +102,20 @@ Add one entry at the end of every phase:
 - what changed in your understanding
 - what interview story came out of the work
 
+
+
+## 2026-10: Hardening and integration
+
+### Learned
+
+- Undefined is not zero. Floating-point noise on constant returns produced a
+  Sharpe ratio of about 1e15 until dispersion below 1e-12 was treated as zero.
+- "No data" and "could not fetch" must stay distinct. yfinance hides transport
+  errors by default, which made outages look like unknown symbols.
+- Libraries' HTTP sessions are not necessarily thread-safe: concurrent yfinance
+  calls hung, and serializing them was no slower.
+- A citation that exists is not a citation that supports. Validating numbers
+  against the cited evidence catches fabricated metrics and obeyed prompt
+  injections that schema validation alone would pass.
+- Tests found a crash in the question-with-documents path and a
+  prompt-injection path through quoted document text before any user did.

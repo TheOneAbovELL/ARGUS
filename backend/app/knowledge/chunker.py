@@ -1,7 +1,8 @@
 """Provenance-preserving document chunking."""
 
-from dataclasses import dataclass
 import hashlib
+from dataclasses import dataclass
+from datetime import date
 
 from app.knowledge.document_loader import DocumentType, KnowledgeDocument
 
@@ -16,10 +17,17 @@ class DocumentChunk:
     source: str
     page_number: int
     chunk_index: int
+    document_id: str = ""
+    owner_id: str = ""
+    published_on: date | None = None
 
 
 class DocumentChunker:
-    """Split page text into overlapping word windows with stable IDs."""
+    """Split page text into overlapping word windows with stable IDs.
+
+    Chunks never span pages, so every chunk maps to exactly one page number
+    for citation. IDs are a hash of the document identity, page, position and
+    text, so re-ingesting the same document is idempotent."""
 
     def __init__(self, chunk_size: int = 250, overlap: int = 40) -> None:
         if chunk_size < 2:
@@ -41,6 +49,8 @@ class DocumentChunker:
                     continue
                 identity = "|".join(
                     (
+                        document.owner_id,
+                        document.document_id,
                         document.ticker,
                         document.document_type.value,
                         document.source,
@@ -59,6 +69,9 @@ class DocumentChunker:
                         source=document.source,
                         page_number=page.page_number,
                         chunk_index=chunk_index,
+                        document_id=document.document_id,
+                        owner_id=document.owner_id,
+                        published_on=document.published_on,
                     )
                 )
                 chunk_index += 1

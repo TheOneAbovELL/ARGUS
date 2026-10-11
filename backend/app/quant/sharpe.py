@@ -4,7 +4,7 @@ import math
 import statistics
 from collections.abc import Sequence
 
-from app.quant.returns import TRADING_DAYS_PER_YEAR
+from app.quant.returns import TRADING_DAYS_PER_YEAR, is_effectively_zero
 
 
 def sharpe_ratio(
@@ -23,6 +23,6 @@ def sharpe_ratio(
     daily_risk_free_rate = (1.0 + annual_risk_free_rate) ** (1.0 / trading_days) - 1.0
     excess_returns = [value - daily_risk_free_rate for value in returns]
     daily_volatility = statistics.stdev(excess_returns)
-    if daily_volatility == 0:
+    if is_effectively_zero(daily_volatility):
         raise ValueError("Sharpe ratio is undefined when return volatility is zero.")
     return statistics.mean(excess_returns) / daily_volatility * math.sqrt(trading_days)

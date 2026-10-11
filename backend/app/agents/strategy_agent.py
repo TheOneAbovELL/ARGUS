@@ -1,77 +1,75 @@
-"""Scenario synthesis from grounded specialist-agent outputs."""
+"""Strategy Agent: balanced scenarios built only from other agents' evidence.
 
-from app.agents.models import (
-    MarketAgentOutput,
-    NewsAgentOutput,
-    RiskAgentOutput,
-    StrategyAgentOutput,
-)
-from app.agents.knowledge_support import citations_from, insights_from
-from app.knowledge.retriever import KnowledgeRetriever
-from app.services.market_data import CompanyAnalysis
+Purpose: frame bull / base / bear hypotheses for further research. Every
+scenario statement is an *interpretation* that cites the evidence it rests
+on. It does not issue buy/sell instructions, price targets, or position
+sizes — ARGUS has no basis for those.
+"""
+
+from app.agents.evidence import EvidenceLedger, num, pct
+from app.agents.models import Claim, ClaimKind, Section
+from app.services.analytics import AssetAnalysis
 
 
 class StrategyAgent:
-    """Build balanced scenarios without issuing investment instructions."""
+    key = "scenarios"
 
-    def __init__(
+    def analyze(
         self,
-        retriever: KnowledgeRetriever | None = None,
-        retrieval_limit: int = 3,
-    ) -> None:
-        self._retriever = retriever
-        self._retrieval_limit = retrieval_limit
+        analysis: AssetAnalysis,
+        ledger: EvidenceLedger,
+        risk_flags: list[Claim],
+        news_ids: list[str],
+        document_ids: list[str],
+    ) -> list[Section]:
+        ids = ledger.metric_ids
+        perf, rel = analysis.performance, analysis.relative
+        s = analysis.symbol
 
-    async def analyze(
-        self,
-        analysis: CompanyAnalysis,
-        market: MarketAgentOutput,
-        risk: RiskAgentOutput,
-        news: NewsAgentOutput,
-    ) -> StrategyAgentOutput:
-        metrics = analysis.metrics
-        ticker = analysis.snapshot.ticker
-        chunks = (
-            await self._retriever.retrieve(
-                "strategy opportunities competitive advantages capital allocation outlook",
-                ticker,
-                self._retrieval_limit,
-            )
-            if self._retriever
-            else []
-        )
-        headline_context = (
-            news.headlines[0] if news.headlines else "No recent headline catalyst"
-        )
-        opportunities = []
-        if metrics.annual_return > 0:
-            opportunities.append("positive historical return trend")
-        if metrics.sharpe_ratio >= 1:
-            opportunities.append("strong historical risk-adjusted performance")
-        if news.headlines:
-            opportunities.append("current company-specific news flow")
-        if chunks:
-            opportunities.append("document-backed strategic context")
-        if not opportunities:
-            opportunities.append("potential valuation or operating improvement")
+        bull: list[Claim] = []
+        if perf.annualized_return is not None and perf.annualized_return > 0 and "annualized_return" in ids:
+            bull.append(Claim(
+                text=f"Momentum case: {s} compounded at {pct(perf.annualized_return)} per year in the window; a continuation would extend that trend.",
+                kind=ClaimKind.INTERPRETATION, evidence_ids=[ids["annualized_return"]]))
+        if rel is not None and rel.alpha is not None and rel.alpha > 0 and "alpha" in ids:
+            bull.append(Claim(
+                text=f"Returns were not explained by market exposure alone: annualized alpha of {pct(rel.alpha)} versus {analysis.benchmark}.",
+                kind=ClaimKind.INTERPRETATION, evidence_ids=[ids["alpha"]]))
+        if perf.sharpe_ratio is not None and perf.sharpe_ratio >= 1 and "sharpe_ratio" in ids:
+            bull.append(Claim(
+                text=f"Risk-adjusted returns were strong (Sharpe {num(perf.sharpe_ratio)}).",
+                kind=ClaimKind.INTERPRETATION, evidence_ids=[ids["sharpe_ratio"]]))
+        if document_ids:
+            bull.append(Claim(
+                text="Review the cited document passages for company-stated drivers that could support continued performance.",
+                kind=ClaimKind.INTERPRETATION, evidence_ids=document_ids[:2]))
 
-        risks = list(risk.risks) or ["historical metrics may not persist"]
-        return StrategyAgentOutput(
-            bull_case=(
-                f"Bull case for {ticker}: {market.summary} Supporting context: "
-                f"{headline_context}."
-            ),
-            bear_case=(
-                f"Bear case for {ticker}: {risk.summary} Adverse market or company "
-                "developments could amplify these exposures."
-            ),
-            neutral_case=(
-                f"Neutral case for {ticker}: current quantitative evidence is historical, "
-                "while headline and filing effects remain uncertain; monitor new prices "
-                "and disclosures."
-            ),
-            key_risks=tuple(risks),
-            key_opportunities=tuple(opportunities),
-            document_insights=insights_from(chunks),
-            citations=citations_from(chunks),
-        )
+        bear: list[Claim] = [flag.model_copy() for flag in risk_flags]
+        if perf.annualized_return is not None and perf.annualized_return < 0 and "annualized_return" in ids:
+            bear.append(Claim(
+                text=f"Trend case: {s} lost {pct(abs(perf.annualized_return))} per year in the window; a continuation would extend losses.",
+                kind=ClaimKind.INTERPRETATION, evidence_ids=[ids["annualized_return"]]))
+        if perf.current_drawdown < -0.10 and "current_drawdown" in ids:
+            bear.append(Claim(
+                text=f"{s} remains {pct(abs(perf.current_drawdown))} below its running peak at the last observation.",
+                kind=ClaimKind.FACT, evidence_ids=[ids["current_drawdown"]]))
+
+        base: list[Claim] = [Claim(
+            text="Base case: historical return and risk statistics describe the past window only; they are not forecasts, and regime changes can invalidate them.",
+            kind=ClaimKind.INTERPRETATION,
+            evidence_ids=[ids[k] for k in ("annualized_return", "annualized_volatility") if k in ids])]
+        if news_ids:
+            base.append(Claim(
+                text="Recent headlines are listed for follow-up; ARGUS does not score their sentiment or price impact.",
+                kind=ClaimKind.INTERPRETATION, evidence_ids=news_ids[:2]))
+        if rel is not None and rel.r_squared is not None and "correlation" in ids:
+            base.append(Claim(
+                text=f"Co-movement with {analysis.benchmark}: correlation of {num(rel.correlation)}, so broad-market moves are "
+                     + ("a major" if rel.r_squared >= 0.5 else "only a partial") + " driver of this asset's returns.",
+                kind=ClaimKind.INTERPRETATION, evidence_ids=[ids["correlation"]]))
+
+        return [
+            Section(key="bull", title="Bull case", claims=bull),
+            Section(key="base", title="Base case", claims=base),
+            Section(key="bear", title="Bear case", claims=bear),
+        ]

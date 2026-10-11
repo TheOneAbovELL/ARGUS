@@ -1,63 +1,91 @@
-"""Explainable interpretation of market and quant data."""
+"""Market Agent: price, trend, and benchmark context from verified inputs.
 
-from app.agents.models import MarketAgentOutput
-from app.agents.knowledge_support import citations_from, insights_from
-from app.knowledge.retriever import KnowledgeRetriever
-from app.services.market_data import CompanyAnalysis
+Purpose: describe where the asset trades and how it has performed.
+Inputs: quote/profile evidence ids and the quant-engine metric ids.
+Output: a ``market`` section of cited claims. It never computes metrics; it
+only reads values already in the evidence ledger.
+Failure mode: missing quote/profile evidence simply omits those claims.
+"""
+
+from app.agents.evidence import EvidenceLedger, pct
+from app.agents.models import Claim, ClaimKind, Section
+from app.services.analytics import AssetAnalysis
+
+
+def trend_label(annualized_return: float) -> str:
+    if annualized_return >= 0.20:
+        return "strongly positive"
+    if annualized_return >= 0:
+        return "positive"
+    if annualized_return > -0.20:
+        return "negative"
+    return "strongly negative"
+
+
+def volatility_band(volatility: float) -> str:
+    if volatility < 0.20:
+        return "low"
+    if volatility < 0.35:
+        return "moderate"
+    return "high"
 
 
 class MarketAgent:
-    """Convert company and quant measurements into a market summary."""
+    key = "market"
 
-    def __init__(
+    def analyze(
         self,
-        retriever: KnowledgeRetriever | None = None,
-        retrieval_limit: int = 3,
-    ) -> None:
-        self._retriever = retriever
-        self._retrieval_limit = retrieval_limit
-
-    async def analyze(self, analysis: CompanyAnalysis) -> MarketAgentOutput:
-        metrics = analysis.metrics
-        if metrics.annual_return >= 0.20:
-            trend = "strong positive"
-        elif metrics.annual_return >= 0:
-            trend = "positive"
-        elif metrics.annual_return > -0.20:
-            trend = "negative"
-        else:
-            trend = "strong negative"
-
-        if metrics.volatility < 0.20:
-            volatility_band = "low"
-        elif metrics.volatility < 0.35:
-            volatility_band = "moderate"
-        else:
-            volatility_band = "high"
-
-        snapshot = analysis.snapshot
-        chunks = (
-            await self._retriever.retrieve(
-                "revenue growth demand business performance management guidance",
-                snapshot.ticker,
-                self._retrieval_limit,
+        analysis: AssetAnalysis,
+        ledger: EvidenceLedger,
+        quote_id: str | None,
+        profile_ids: list[str],
+        conventions_id: str,
+    ) -> Section:
+        claims: list[Claim] = []
+        ids = ledger.metric_ids
+        if quote_id:
+            claims.append(Claim(text=ledger.get(quote_id).statement, kind=ClaimKind.FACT, evidence_ids=[quote_id]))
+        if profile_ids:
+            claims.append(
+                Claim(text=ledger.get(profile_ids[0]).statement, kind=ClaimKind.FACT, evidence_ids=[profile_ids[0]])
             )
-            if self._retriever
-            else []
-        )
-        evidence_note = (
-            f" Document evidence: {chunks[0].text[:240]}"
-            if chunks
-            else ""
-        )
-        return MarketAgentOutput(
-            summary=(
-                f"{snapshot.company_name} ({snapshot.ticker}) trades at "
-                f"{snapshot.current_price:.2f}. Its annualized historical return is "
-                f"{metrics.annual_return:.1%}, indicating a {trend} trend, with "
-                f"{volatility_band} annualized volatility of {metrics.volatility:.1%}."
-                f"{evidence_note}"
-            ),
-            document_insights=insights_from(chunks),
-            citations=citations_from(chunks),
-        )
+        perf, rel = analysis.performance, analysis.relative
+        if "total_return" in ids:
+            claims.append(Claim(text=ledger.get(ids["total_return"]).statement, kind=ClaimKind.FACT,
+                                evidence_ids=[ids["total_return"]]))
+        if perf.annualized_return is not None and "annualized_return" in ids:
+            claims.append(
+                Claim(
+                    text=(
+                        f"The annualized return of {pct(perf.annualized_return)} describes a "
+                        f"{trend_label(perf.annualized_return)} historical trend over the window."
+                    ),
+                    kind=ClaimKind.INTERPRETATION,
+                    evidence_ids=[ids["annualized_return"], conventions_id],
+                )
+            )
+        if rel is not None and rel.excess_annualized_return is not None and "excess_annualized_return" in ids:
+            direction = "outperformed" if rel.excess_annualized_return >= 0 else "underperformed"
+            claims.append(
+                Claim(
+                    text=(
+                        f"{analysis.symbol} {direction} {analysis.benchmark} by "
+                        f"{pct(abs(rel.excess_annualized_return))} per year on an annualized basis."
+                    ),
+                    kind=ClaimKind.FACT,
+                    evidence_ids=[ids["excess_annualized_return"]],
+                )
+            )
+        if perf.annualized_volatility is not None and "annualized_volatility" in ids:
+            claims.append(
+                Claim(
+                    text=(
+                        f"Annualized volatility of {pct(perf.annualized_volatility)} is "
+                        f"{volatility_band(perf.annualized_volatility)} relative to a broad-equity "
+                        "reference range of roughly 15%-20%."
+                    ),
+                    kind=ClaimKind.INTERPRETATION,
+                    evidence_ids=[ids["annualized_volatility"], conventions_id],
+                )
+            )
+        return Section(key=self.key, title="Market & performance", claims=claims)

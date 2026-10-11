@@ -27,7 +27,7 @@ data or actions.
 Example:
 
 ```text
-POST /api/analyze
+POST /api/analytics/asset
 ```
 
 ### REST

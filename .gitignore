@@ -7,3 +7,24 @@ node_modules/
 
 backend/.argus/
 *.pyc
+
+# Local evaluation output
+backend/evals/results/
+backend/.pytest_cache/
+backend/.ruff_cache/
+
+# Secrets: never commit real environment files
+.env
+*.env
+.env.*
+!.env.example
+!**/.env.example
+*.tsbuildinfo
+
+# Python virtual environments
+.venv/
+venv/
+
+# Playwright artifacts
+frontend/test-results/
+frontend/playwright-report/

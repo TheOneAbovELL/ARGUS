@@ -1,5 +1,20 @@
-"""Deterministic quantitative analytics for ARGUS."""
+"""Deterministic quantitative analytics for ARGUS.
 
-from app.quant.metrics import QuantEngine, QuantMetrics
+Pure functions only: nothing in this package performs I/O or calls a model.
+"""
 
-__all__ = ["QuantEngine", "QuantMetrics"]
+from app.quant.metrics import (
+    PerformanceMetrics,
+    QuantDataError,
+    RelativeMetrics,
+    performance_metrics,
+    relative_metrics,
+)
+
+__all__ = [
+    "PerformanceMetrics",
+    "QuantDataError",
+    "RelativeMetrics",
+    "performance_metrics",
+    "relative_metrics",
+]

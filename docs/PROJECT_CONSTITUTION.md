@@ -130,6 +130,16 @@ Even when building an MVP, ARGUS should use habits that scale:
 - stable API contracts
 - documentation
 
+## Current Status (2026-10)
+
+Phases 2-7 and the backend parts of 9-10 are implemented: deterministic quant
+and portfolio engines, provider abstraction with provenance and caching,
+SQLAlchemy/Alembic persistence with authentication, a document knowledge layer,
+evidence-grounded research agents with validation, SSE progress, Docker, and CI.
+One deliberate deviation from the original plan: the LLM layer is optional and
+limited to a local model or an explicitly allowed free-tier endpoint (`ARGUS_LLM_ALLOW_REMOTE=true`) (no paid APIs), and research is deterministic by default. See
+[ARCHITECTURE.md](ARCHITECTURE.md) and [adr/](adr/).
+
 ## Development Phases
 
 ### Phase 1: Foundations

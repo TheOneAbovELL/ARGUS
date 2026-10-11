@@ -1,131 +1,69 @@
-# ARGUS Knowledge Layer
+# Knowledge Layer (Documents and Retrieval)
 
-## Purpose
+## Lifecycle
 
-The Knowledge Layer retrieves evidence from company disclosures so research
-agents can combine quantitative behavior with management statements, risk
-factors, operating context, and reported events. It is a retrieval subsystem,
-not a chatbot and not a replacement for the Quant Engine.
+1. **Acquire:** multipart upload (`POST /api/documents`) or SEC EDGAR import
+   (`POST /api/documents/import-sec`).
+2. **Validate:** size is enforced while streaming (15 MB uploads, 20 MB
+   filings). The type is decided by content (`%PDF-` magic bytes), not the
+   extension. Empty, binary-as-text, encrypted, or oversized (>600 pages)
+   inputs are rejected. Duplicates (same SHA-256 per user) return 409.
+3. **Parse:** `pypdf` page by page (1-based page numbers kept); UTF-8 text;
+   HTML via the stdlib parser with scripts/styles stripped, split into
+   3,000-word pseudo-pages. Scanned PDFs without a text layer are reported as
+   unreadable. ARGUS does not perform OCR.
+4. **Chunk:** 180-word windows with 30-word overlap that never cross pages.
+   Chunk ids are a hash of owner, document, page, position, and text
+   (idempotent re-ingestion).
+5. **Embed:** local ONNX all-MiniLM-L6-v2 via Chroma (free, about 80 MB
+   downloaded once). ARGUS downloads the model itself
+   (`app/knowledge/model_cache.py`): resumable Range requests, long timeouts,
+   retries, SHA-256 verification, and safe extraction. It runs in a background
+   thread at startup, or manually with `python -m app.knowledge.model_cache`.
+   Chroma's own downloader (short timeout, no resume) is never used: until the
+   model is present, embedding fails fast with `embedding_model_unavailable`,
+   and `/api/system/status` reports the download progress.
+   `ARGUS_EMBEDDING_PROVIDER=hash` is a no-download, purely lexical alternative
+   for tests and slow networks. Each provider has its own Chroma collection
+   (`argus_knowledge_minilm` or `argus_knowledge_hash256`), because vectors from
+   different models are not comparable. Switching providers therefore requires
+   re-uploading documents.
+6. **Index:** ChromaDB persistent collection with metadata `owner_id`,
+   `document_id`, `ticker`, `document_type`, `title`, `source`, `page_number`,
+   `chunk_index`, `published_on`.
+7. **Retrieve:** dense top-`k×5` filtered by `owner_id` (and ticker, type, and
+   ready document ids) inside Chroma, then reranked as
+   `0.75 · cosine + 0.25 · keyword coverage`. Near-duplicates are removed, at most
+   two chunks are kept per document, and results below `min_score` (0.15) are
+   dropped, so weak matches become "insufficient evidence" rather than fake support.
+8. **Cite:** each passage becomes a `D` evidence item with document id, page,
+   chunk id, and score. `GET /api/documents/{id}/file` serves the original
+   (PDFs open at `#page=N`), with `Content-Security-Policy: sandbox`.
 
-## Architecture
+## Why these choices
 
-```text
-10-K / 10-Q / annual report / earnings call / investor presentation
-    -> DocumentLoader
-    -> DocumentChunker
-    -> EmbeddingProvider
-    -> ChromaVectorStore
-    -> KnowledgeRetriever
-    -> MarketAgent / RiskAgent / NewsAgent / StrategyAgent
-    -> document insights + source citations
-```
+* **ChromaDB** was already in the project, runs embedded with no server, and
+  supports metadata filters. A dedicated vector database would add operations
+  cost without a measured need.
+* **Hybrid rerank instead of a cross-encoder:** keyword coverage fixes the
+  common dense-retrieval miss on exact financial terms (e.g. "export controls")
+  at near-zero cost. A cross-encoder reranker would be the next step if an
+  evaluation showed a need.
+* **Small chunks** keep citations precise. Page boundaries are never crossed,
+  so every citation resolves to exactly one page.
 
-## Ingestion
+## Consistency with the relational database
 
-`DocumentLoader.load_pdf` extracts text page by page with pypdf. Page numbers,
-document type, ticker, title, and source are retained. Image-only PDFs are rejected
-with an explicit OCR-required error rather than silently producing empty context.
-Earnings-call transcripts and other text sources use `load_text`.
+The `documents` row is the authority. Upload: row `processing` → parse (failure
+deletes the row, 422) → store the file → index → row `ready`. If storing or
+indexing fails, partial chunks, the file, and the row are all removed (503), so
+retrying is a plain re-upload rather than a "duplicate" error. Delete: chunks first, then the
+row and the file; if Chroma is unavailable the row is kept so the delete can be
+retried.
 
-Supported document types are:
+## Security
 
-- `10-K`
-- `10-Q`
-- `annual_report`
-- `earnings_call`
-- `investor_presentation`
-
-Example:
-
-```python
-import asyncio
-
-from app.dependencies.knowledge import get_knowledge_retriever
-from app.knowledge.document_loader import DocumentLoader, DocumentType
-
-document = DocumentLoader().load_pdf(
-    "documents/nvda-10k.pdf",
-    ticker="NVDA",
-    document_type=DocumentType.TEN_K,
-    source="https://www.sec.gov/...",
-)
-asyncio.run(get_knowledge_retriever().ingest(document))
-```
-
-## Chunking
-
-Documents are split into overlapping word windows. Overlap preserves context near
-boundaries. Stable SHA-256 IDs make repeated ingestion idempotent through Chroma
-upserts. Chunks never cross page boundaries, keeping citations meaningful.
-
-## Embeddings
-
-Production wiring uses Chroma's local ONNX MiniLM default embedding function.
-The first semantic query may download its model. Tests inject a deterministic
-hash embedding, so CI remains offline and repeatable. The embedding interface can
-later accept a different local or hosted model without changing agents or Chroma.
-
-## Vector storage
-
-Chroma persists embeddings in the configured `argus_knowledge` collection. Every
-record stores ticker, document type, title, source, page, and chunk index. Queries
-are filtered by normalized ticker before evidence reaches an agent.
-
-Environment settings use the `ARGUS_` prefix:
-
-- `ARGUS_KNOWLEDGE_CHROMA_PATH`
-- `ARGUS_KNOWLEDGE_COLLECTION_NAME`
-- `ARGUS_KNOWLEDGE_CHUNK_SIZE`
-- `ARGUS_KNOWLEDGE_CHUNK_OVERLAP`
-- `ARGUS_KNOWLEDGE_RETRIEVAL_LIMIT`
-
-## Agent integration
-
-Each specialist asks a different retrieval question:
-
-- Market: revenue, demand, performance, and guidance
-- Risk: disclosed risk factors, regulation, competition, liquidity, supply chain
-- News: earnings events, guidance, and outlook
-- Strategy: advantages, opportunities, allocation, and strategic outlook
-
-Agents use extractive snippets and return structured citations. Strategy still
-depends on Market, Risk, and News outputs; retrieval does not bypass that graph.
-When no documents exist, research continues with empty document context.
-
-## Research response
-
-`POST /research` retains existing summaries and scenarios and adds:
-
-- `document_insights`: deduplicated retrieved excerpts
-- `sources`: title, type, source, page, chunk ID, and similarity score
-
-This keeps narrative output separate from auditable evidence.
-
-## Limitations
-
-- pypdf does not perform OCR for scanned documents.
-- Retrieval relevance is not proof that a statement is current or correct.
-- Tables and multi-column PDFs may extract imperfectly.
-- Similarity score is ranking evidence, not confidence or truth probability.
-- Filing access and licensing remain the caller's responsibility.
-- This phase does not fetch SEC filings automatically; it ingests supplied files.
-
-## Common mistakes
-
-- Embedding an entire filing as one chunk
-- Dropping page and source metadata
-- Mixing documents from different tickers in retrieval
-- Treating retrieval score as factual confidence
-- Allowing agents to cite text that was not retrieved
-- Hiding the no-document case by generating plausible context
-- Re-ingesting with random IDs and creating duplicates
-- Running blocking PDF or vector operations on the event loop
-
-## Knowledge check
-
-1. Why must chunks retain page-level provenance?
-2. Why does overlap improve retrieval near chunk boundaries?
-3. What is the difference between embedding similarity and factual confidence?
-4. Why are stable chunk IDs important?
-5. Why should RiskAgent and MarketAgent use different retrieval queries?
-6. What should happen when a ticker has no indexed documents?
+Document text is untrusted. It is stored and quoted, never executed or
+followed. Source URLs are recorded as provenance only, and ARGUS never fetches
+user-supplied URLs (no SSRF surface). SEC requests go only to fixed SEC hosts,
+with accession numbers and document names validated against strict patterns.

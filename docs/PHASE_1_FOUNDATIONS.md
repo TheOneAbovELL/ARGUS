@@ -1,3 +1,6 @@
+> **Historical document.** This records the phase-1 learning plan. For the system as
+> built, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 # Phase 1 Foundations
 
 ## Goal

@@ -3,8 +3,8 @@
 import pytest
 
 from app.knowledge.document_loader import (
-    DocumentLoadError,
     DocumentLoader,
+    DocumentLoadError,
     DocumentType,
 )
 

@@ -1,138 +1,96 @@
-# ARGUS Quant Analytics Engine
+# Quant Engine and Portfolio Engine
 
-## Purpose
+All financial numbers in ARGUS come from the pure functions in `app/quant/` and
+`app/portfolio/`. No language model computes, estimates, or rewrites a metric.
 
-The Quant Engine converts adjusted daily closing prices into deterministic risk
-and return analytics. It contains no AI, predictions, or hardcoded market
-results. Identical inputs and configuration produce identical outputs.
+## Data conventions
 
-## Architecture
+* **Prices:** dividend-adjusted closes (`adj_close`) for every return metric;
+  traded closes (`close`, split-adjusted by the provider) are returned for charts.
+* **Returns:** simple close-to-close returns `p_t / p_{t-1} - 1`.
+* **Annualization factor N:** inferred from observation density: 365 when the
+  series has more than ~308 observations per 365.25 calendar days (daily trading,
+  e.g. crypto), otherwise 252. Density is used instead of counting Saturdays and
+  Sundays, so exchanges with a Friday-Saturday weekend (e.g. Sun-Thu sessions)
+  still get 252.
+* **Alignment:** relative metrics use the inner join of asset and benchmark
+  dates. Prices are never forward-filled (that would fabricate zero returns).
+* **Risk-free rate:** annual decimal (default 0), converted to a per-period rate
+  `(1 + rf)^(1/N) - 1`.
+* **Signs:** drawdown, VaR, and CVaR are returns, so losses are negative.
+* **Undefined is `null`, never `0`.** A metric that is undefined for the input
+  (zero volatility, no downside, too few observations) is reported as `null`
+  with a warning, and the other metrics are still returned. Dispersion below
+  `1e-12` counts as zero: without that guard, floating-point noise on a constant
+  return series produced a Sharpe ratio of about 10¹⁵ (found and fixed by a test).
+* **Short samples:** fewer than 60 returns adds an "unreliable" warning.
+* **Data cleaning:** duplicate dates keep the latest bar; missing,
+  non-positive, or non-finite closes are dropped; both are reported as quality notes.
 
-```text
-POST /analyze
-    -> MarketDataService
-        -> QuantEngine
-            -> MarketDataProvider (asset and SPY history concurrently)
-            -> metric functions
-        -> AnalyzeResponse
-```
+## Metric definitions
 
-The provider adapts Yahoo Finance data into dated price observations. The engine
-aligns the asset and benchmark on shared trading dates before calculating daily
-simple returns. Metric modules are pure functions, making the financial logic
-independent from HTTP, yfinance, and dependency injection.
+The same definitions are served at `GET /api/meta/metrics` for UI tooltips.
 
-## Calculation conventions
+| Metric | Definition |
+|---|---|
+| Total return | `P_end / P_start − 1` |
+| Annualized return (CAGR) | `(P_end / P_start)^(365.25 / calendar days) − 1` (calendar-based, robust to gaps) |
+| Volatility | sample stdev of returns × √N |
+| Sharpe | mean(r − rf) / stdev(r − rf) × √N |
+| Sortino | mean(r − rf) / downside deviation × √N; downside deviation = √(mean(min(r − rf, 0)²)) over all periods |
+| Max drawdown | min over t of `P_t / max_{s≤t} P_s − 1`, with peak, trough, and recovery dates |
+| Longest drawdown | longest run of observations below a prior peak (including an unrecovered one) |
+| VaR 95% (1-day, historical) | 5th percentile of daily returns, linear interpolation; ≥20 returns required |
+| CVaR 95% | mean of returns at or below the VaR |
+| Beta / alpha | OLS of asset excess returns on benchmark excess returns; alpha = intercept × N (arithmetic) |
+| Correlation, R² | Pearson on aligned daily returns; R² = ρ² |
+| Tracking error / IR | stdev(r_a − r_b) × √N; IR = mean(r_a − r_b) × N / TE |
+| Rolling volatility / beta | 63-observation trailing windows, `null` until the window fills |
 
-- Prices: adjusted daily closes (`auto_adjust=True`)
-- Window: one year by default (`ARGUS_QUANT_HISTORY_PERIOD`)
-- Annualization: 252 trading days
-- Benchmark: SPY by default (`ARGUS_QUANT_BENCHMARK_TICKER`)
-- Risk-free rate: 0 by default (`ARGUS_QUANT_ANNUAL_RISK_FREE_RATE`)
-- Missing or insufficient observations: explicit error; never estimated
+## Portfolio models
 
-## Metrics
+| Model | NAV | When it applies |
+|---|---|---|
+| `daily_rebalanced` | `NAV_t = NAV_{t−1} · (1 + Σ w_i r_{i,t})` | Weights reset to target every close |
+| `buy_and_hold` | `NAV_t = Σ w_i · P_{i,t} / P_{i,0}` | Allocate once; weights drift (ending weights reported) |
 
-### Annual return
+Averaging constituent returns is only valid for the rebalanced model, and the
+engine never does it for buy-and-hold. Assets are inner-joined on common dates.
+If a holding listed late, the window starts later and a warning says so. Mixed
+currencies are flagged (no FX conversion).
 
-Formula: `(ending price / starting price)^(252 / observed intervals) - 1`.
+**Risk decomposition (Euler):** with annualized covariance Σ and weights w,
+σ_p = √(wᵀΣw); marginal risk = (Σw)/σ_p; contribution share =
+w_i (Σw)_i / σ_p², which sums to exactly 1. Diversification ratio =
+Σ w_i σ_i / σ_p.
 
-This is the compound annual growth rate implied by the observed price path.
-Institutions use annualized return to compare investments measured over different
-windows. It ignores the path between endpoints and is sensitive to the selected
-start and end dates.
+**Return contribution:** exact for buy-and-hold (`w_i × asset total return`,
+sums to the portfolio total return); an arithmetic approximation for the
+rebalanced model (stated in the response).
 
-### Volatility
+**Historical stress replay:** current weights are held through five named
+episodes (GFC 2007–09, 2011 downgrade, Q4 2018, COVID 2020, 2022 rates).
+An episode is reported as *not computable* when any holding lacks history
+covering the episode (within 7 days of its start **and** end), rather than
+silently re-weighting the remaining holdings or shortening the episode. The
+benchmark return is measured over exactly the portfolio's first and last
+replayed dates, so the two are comparable.
 
-Formula: `sample standard deviation(daily returns) * sqrt(252)`.
+**Stated assumptions (returned with every analysis):** dividends reinvested; no
+costs, taxes, slippage, or cash drag; no forward-fill; current weights applied
+retrospectively (survivorship and look-ahead bias); no FX conversion.
 
-Volatility measures dispersion, not direction. Risk teams use it in limits,
-portfolio construction, scenario design, and risk-adjusted comparisons. It treats
-upside and downside variation equally and historical volatility may not describe
-future regimes.
+## Validation approach
 
-### Sharpe ratio
+Tests use hand-computed fixtures and independent re-implementations (numpy)
+rather than calling the code under test to produce expected values:
+`tests/test_quant_*.py` and `tests/test_portfolio_engine.py`. They also check
+invariants: drawdown ≤ 0 and equal to the running-peak definition;
+correlation in [−1, 1] with a symmetric matrix and unit diagonal; risk
+contributions sum to 1; buy-and-hold contributions sum to total return; a
+single-asset portfolio equals the asset; invalid weights are rejected; and
+missing history is an error, not a silent re-weight.
 
-Formula: `mean(daily return - daily risk-free rate) / sample standard deviation`
-multiplied by `sqrt(252)`.
-
-The Sharpe ratio measures excess return per unit of total volatility. Asset
-managers use it to compare risk-adjusted performance. It is unstable for short
-samples, assumes volatility is an adequate risk proxy, and can be distorted by
-non-normal or smoothed returns.
-
-### Maximum drawdown
-
-Formula: the minimum value of `price / running peak - 1`.
-
-Maximum drawdown is the worst historical peak-to-trough loss. Institutions use it
-for capital preservation limits, manager evaluation, and stress discussions. It
-describes one realized path and does not state how long recovery takes or predict
-the next loss.
-
-### Beta versus the S&P 500
-
-Formula: `sample covariance(asset returns, benchmark returns) / sample variance`
-of benchmark returns.
-
-Beta estimates sensitivity to broad-market movement. A beta above one indicates
-greater historical sensitivity; below one indicates lower sensitivity. Portfolio
-and risk teams use beta for hedging and systematic-risk attribution. It depends on
-the benchmark, data frequency, date alignment, and sample window, and it can
-change across regimes.
-
-## Reliability and testing
-
-Asset and benchmark histories are requested concurrently. Both histories are
-aligned by date before returns are calculated, preventing holiday or missing-row
-mismatches. Pure metric tests use fixed arrays. Engine and API tests inject
-deterministic providers, so the normal suite never depends on Yahoo Finance.
-
-## Common implementation errors
-
-- Using unadjusted closes across splits or dividends
-- Comparing asset and benchmark returns from different dates
-- Mixing population and sample standard deviations
-- Annualizing returns or volatility twice
-- Using 365 instead of a documented trading-day convention
-- Silently replacing missing observations or undefined ratios
-- Treating volatility as equivalent to loss
-- Blocking the event loop with synchronous market-data calls
-
-## Interview preparation
-
-### Sharpe ratio
-
-1. Why must the risk-free rate match the return frequency?
-2. What makes a Sharpe ratio unreliable for short or non-normal return series?
-3. Why is Sharpe undefined for a constant return stream in this implementation?
-
-### Beta
-
-1. Why must asset and benchmark dates be aligned before computing beta?
-2. How does benchmark choice alter beta?
-3. What does a negative beta mean, and why might it be unstable?
-
-### Volatility
-
-1. Why is daily volatility multiplied by the square root of 252?
-2. Why does ARGUS use sample rather than population standard deviation?
-3. Why does volatility penalize upside and downside movement equally?
-
-### Maximum drawdown
-
-1. How is maximum drawdown different from volatility?
-2. Why is drawdown path-dependent?
-3. What information does maximum drawdown omit about recovery?
-
-### Quant Engine architecture
-
-1. Why are metric calculations pure functions?
-2. Why does the engine, rather than the route, fetch benchmark history?
-3. Where should calculation conventions be configured and documented?
-
-### Service layer and dependency injection
-
-1. What responsibility does `MarketDataService` retain?
-2. How does provider injection keep tests deterministic?
-3. How could ARGUS replace Yahoo Finance without rewriting metric functions?
+Out of scope (deliberately): optimizers and strategy backtests. They are easy to
+add and hard to validate honestly without transaction-cost and survivorship
+modelling.
